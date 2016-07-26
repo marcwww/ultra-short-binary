@@ -9,8 +9,11 @@ int main()
 	usb_ft::usb ft_1(img_1);
 	usb_ft::usb ft_2(img_2);
 
-
+	//double t=cv::getTickCount();
 	ft_1.generate_ft();
+	//t=(cv::getTickCount()-t)/cv::getTickFrequency();
+	//std::cout<<t<<"s"<<std::endl;
+
 	ft_2.generate_ft();
 	
 	std::vector<int> res;

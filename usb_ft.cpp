@@ -20,7 +20,7 @@ namespace usb_ft
 	int usb_params::alpha=12;
 	int usb_params::beta=12;
 	int usb_params::C=4;
-	int usb_params::n=100;
+	int usb_params::n=1000;
 	float usb_params::omega=0.35;
 	int usb_params::d=24;
 	int usb_params::m=16;
@@ -59,21 +59,11 @@ namespace usb_ft
 		for(int i=0;i<kps.size();i++)
 		{
 			//Omit the key points lying close to the edges of the image.
-			try
-			{
-				int wp=kps[i].size*usb_params::alpha;
-				cv::RotatedRect sub_rect(kps[i].pt,cv::Size2f(wp,wp),kps[i].angle);
-				cv::Rect a=sub_rect.boundingRect();
-				if(!(a.x>=0 && a.y>=0 && a.x+a.width<src.cols && a.y+a.width<src.rows))
-					continue;
-
-				cv::Mat sub_bimg(src,sub_rect.boundingRect());
-			}
-			catch(cv::Exception e)
-			{
-				//std::cout<<e.err<<std::endl;
+			int wp=kps[i].size*usb_params::alpha;
+			cv::RotatedRect sub_rect(kps[i].pt,cv::Size2f(wp,wp),kps[i].angle);
+			cv::Rect a=sub_rect.boundingRect();
+			if(!(a.x>=0 && a.y>=0 && a.x+a.width<src.cols && a.y+a.width<src.rows))
 				continue;
-			}
 
 			int is_existed=false;
 			for(int j=0;j<temp_container.size();j++)
@@ -82,6 +72,8 @@ namespace usb_ft
 					is_existed=true;
 					break;
 				}
+
+
 			if(!is_existed)
 			{
 				temp_container.push_back(kps[i]);
@@ -89,6 +81,7 @@ namespace usb_ft
 				if(collection_size==usb_params::n)
 					break;
 			}
+			
 		}
 
 		kps=temp_container;
@@ -105,68 +98,71 @@ namespace usb_ft
 		M=cv::Mat(45,kps.size(),CV_8U);
 
 
-
+		//double t=cv::getTickCount();
 		usb_extraction();
+		//t=(cv::getTickCount()-t)/cv::getTickFrequency();
+		//std::cout<<t<<"s"<<std::endl;
+
+		//double t=cv::getTickCount();
 		asf_extraction();
-	
+		//t=(cv::getTickCount()-t)/cv::getTickFrequency();
+		//std::cout<<t<<"s"<<std::endl;
 	}
 
 	void usb::usb_extraction()
 	{
 		std::vector<cv::Mat> sub_imgs;
 		
+
+		omp_set_num_threads(8);
+#pragma opm parallel for
 		for(int i=0;i<kps.size();i++)
 		{
 			int wp=kps[i].size*usb_params::alpha;
 			
-			try
+			
+			cv::RotatedRect sub_rect(kps[i].pt,cv::Size2f(wp,wp),kps[i].angle);
+				
+			//cv::Point2f vertices[4];
+			//sub_rect.points(vertices);
+			//for (int i = 0; i < 4; i++)
+				//line(src, vertices[i], vertices[(i+1)%4], cv::Scalar(0,255,0));
+
+			cv::Rect a=sub_rect.boundingRect();
+
+			cv::Mat sub_bimg(src,sub_rect.boundingRect());
+			//cv::imshow("origin",sub_bimg);
+
+			cv::Mat rotated_mat=cv::getRotationMatrix2D(cv::Point2f(sub_bimg.cols/2,sub_bimg.rows/2),kps[i].angle,1);
+
+			cv::Mat upright_sub_bimg;
+			cv::warpAffine(sub_bimg,upright_sub_bimg,rotated_mat,sub_bimg.size());
+				
+			cv::Mat upright_sub_img(upright_sub_bimg,cv::Rect(upright_sub_bimg.cols/2-wp/2,upright_sub_bimg.rows/2-wp/2,wp,wp));
+
+			cv::Mat normalized_path;
+			cv::resize(upright_sub_img,normalized_path,cv::Size(usb_params::D,usb_params::D));
+
+			//cv::imshow("normalized",normalized_path);
+			//cv::imshow("src",src);
+			//cv::waitKey(1);
+
+				
+			//si_index: sub_image index
+			for(int si_index=0;si_index<usb_params::g*usb_params::g;si_index++)
 			{
-				cv::RotatedRect sub_rect(kps[i].pt,cv::Size2f(wp,wp),kps[i].angle);
-				
-				//cv::Point2f vertices[4];
-				//sub_rect.points(vertices);
-				//for (int i = 0; i < 4; i++)
-					//line(src, vertices[i], vertices[(i+1)%4], cv::Scalar(0,255,0));
+				int step=usb_params::D/usb_params::g;
 
-				cv::Rect a=sub_rect.boundingRect();
+				cv::Rect x((si_index*step)%usb_params::D,(si_index/usb_params::g)%usb_params::D*step,step,step);
 
-				cv::Mat sub_bimg(src,sub_rect.boundingRect());
-				//cv::imshow("origin",sub_bimg);
+				cv::Mat d_patch(normalized_path,cv::Rect((si_index*step)%usb_params::D,(si_index/usb_params::g)%usb_params::D*step,step,step));
 
-				cv::Mat rotated_mat=cv::getRotationMatrix2D(cv::Point2f(sub_bimg.cols/2,sub_bimg.rows/2),kps[i].angle,1);
+				//std::cout<<d_patch<<std::endl;
 
-				cv::Mat upright_sub_bimg;
-				cv::warpAffine(sub_bimg,upright_sub_bimg,rotated_mat,sub_bimg.size());
-				
-				cv::Mat upright_sub_img(upright_sub_bimg,cv::Rect(upright_sub_bimg.cols/2-wp/2,upright_sub_bimg.rows/2-wp/2,wp,wp));
-
-				cv::Mat normalized_path;
-				cv::resize(upright_sub_img,normalized_path,cv::Size(usb_params::D,usb_params::D));
-
-				//cv::imshow("normalized",normalized_path);
-				//cv::imshow("src",src);
-				//cv::waitKey(1);
-
-				
-				//si_index: sub_image index
-				for(int si_index=0;si_index<usb_params::g*usb_params::g;si_index++)
-				{
-					int step=usb_params::D/usb_params::g;
-
-					cv::Rect x((si_index*step)%usb_params::D,(si_index/usb_params::g)%usb_params::D*step,step,step);
-
-					cv::Mat d_patch(normalized_path,cv::Rect((si_index*step)%usb_params::D,(si_index/usb_params::g)%usb_params::D*step,step,step));
-
-					//std::cout<<d_patch<<std::endl;
-
-					calc_M_col(d_patch,si_index,i);
+				calc_M_col(d_patch,si_index,i);
 					
-				}
 			}
-			catch(cv::Exception e)
-			{
-			//	std::cout<<e.err<<std::endl;
-			}
+		
 		}
 		
 
@@ -179,6 +175,8 @@ namespace usb_ft
 	}
 	void usb::asf_extraction()
 	{
+		omp_set_num_threads(8);
+#pragma opm parallel for
 		for(int i=0;i<kps.size();i++)
 		{
 			int rp=usb_params::beta*kps[i].size;
